@@ -25,8 +25,9 @@ public class CameraManager : MonoBehaviour
     private Camera cam;
     private Collider2D targetCollider;
 
-    private float fixedCameraY;
+    private float normalCameraY;
     private float normalCameraSize;
+    private float fixedBottomWorldY;
 
     private float xVelocity;
     private float zoomVelocity;
@@ -45,10 +46,17 @@ public class CameraManager : MonoBehaviour
 
         // Camera Y is permanently locked to the position
         // where the camera starts in the scene.
-        fixedCameraY = transform.position.y;
+        normalCameraY = transform.position.y;
 
         if (cam)
+        {
             normalCameraSize = cam.orthographicSize;
+
+            // Remember where the bottom of the camera
+            // originally existed in world space.
+            fixedBottomWorldY =
+                normalCameraY - normalCameraSize;
+        }
 
         if (target)
             targetCollider = target.GetComponent<Collider2D>();
@@ -59,13 +67,14 @@ public class CameraManager : MonoBehaviour
         if (!target)
             return;
 
-        FollowTargetXOnly();
         UpdateDynamicZoom();
+        FollowTarget();
     }
 
-    private void FollowTargetXOnly()
+    private void FollowTarget()
     {
-        float targetX = target.position.x + xOffset;
+        float targetX =
+            target.position.x + xOffset;
 
         float newX = Mathf.SmoothDamp(
             transform.position.x,
@@ -74,11 +83,17 @@ public class CameraManager : MonoBehaviour
             xSmoothTime
         );
 
-        // IMPORTANT:
-        // Y never follows the player.
+        // Keep the ORIGINAL bottom edge of the camera
+        // at the same world position while zooming.
+        //
+        // Bigger orthographic size = camera moves upward.
+        float newY =
+            fixedBottomWorldY +
+            cam.orthographicSize;
+
         transform.position = new Vector3(
             newX,
-            fixedCameraY,
+            newY,
             transform.position.z
         );
     }
@@ -94,7 +109,8 @@ public class CameraManager : MonoBehaviour
             ? targetCollider.bounds.max.y
             : target.position.y;
 
-        float heightAboveCamera = playerTopY - fixedCameraY;
+        float heightAboveCamera =
+            playerTopY - normalCameraY;
 
         float desiredSize = normalCameraSize;
 

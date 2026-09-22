@@ -35,6 +35,9 @@ public class Player : MonoBehaviour
     private bool wasGrounded;
     private bool stopped;
 
+    private bool gameplayActive;
+    private bool waitForFreshInput;
+
     // Score line:
     // false = player is allowed to score on the next upward crossing.
     // true  = player has already scored and must cross back down first.
@@ -47,19 +50,46 @@ public class Player : MonoBehaviour
         rb.gravityScale = gravity;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
+        gameplayActive = false;
+
+        // Freeze the player while sitting on StartPanel.
+        rb.velocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+        rb.bodyType = RigidbodyType2D.Kinematic;
     }
 
     private void Update()
     {
-        holding =
+        if (!gameplayActive || stopped)
+        {
+            holding = false;
+            return;
+        }
+
+        bool inputPressed =
             Input.GetMouseButton(0) ||
             Input.touchCount > 0 ||
             Input.GetKey(KeyCode.Space);
+
+        // Prevent the same tap that pressed
+        // "Tap To Start" from accelerating the ball.
+        if (waitForFreshInput)
+        {
+            holding = false;
+
+            if (!inputPressed)
+                waitForFreshInput = false;
+
+            return;
+        }
+
+        holding = inputPressed;
     }
 
     private void FixedUpdate()
     {
-        if (stopped)
+        if (stopped || !gameplayActive)
             return;
 
         CheckGround();
@@ -219,15 +249,15 @@ public class Player : MonoBehaviour
             return;
         }
 
-        if (angleDifference > maxAngleDifference)
-        {
-            GameManager.I?.Crash(
-                "BAD LANDING\nAngle: " +
-                angleDifference.ToString("0.0") + "°"
-            );
+        //if (angleDifference > maxAngleDifference)
+        //{
+        //    GameManager.I?.Crash(
+        //        "BAD LANDING\nAngle: " +
+        //        angleDifference.ToString("0.0") + "°"
+        //    );
 
-            return;
-        }
+        //    return;
+        //}
 
         // Successful landing does NOT give score anymore.
         // Score is now handled by the score-line trigger.
@@ -328,10 +358,42 @@ public class Player : MonoBehaviour
     public void StopPlayer()
     {
         stopped = true;
+        gameplayActive = false;
+        holding = false;
 
         rb.velocity = Vector2.zero;
         rb.angularVelocity = 0f;
 
         rb.bodyType = RigidbodyType2D.Kinematic;
+    }
+
+    public void PrepareForStart()
+    {
+        gameplayActive = false;
+        stopped = false;
+        holding = false;
+
+        rb.velocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+
+        rb.bodyType = RigidbodyType2D.Kinematic;
+    }
+
+    public void BeginGame()
+    {
+        stopped = false;
+        gameplayActive = true;
+
+        // Ignore the Tap To Start touch until released.
+        waitForFreshInput = true;
+        holding = false;
+
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = gravity;
+
+        rb.velocity = Vector2.zero;
+        rb.angularVelocity = 0f;
+
+        rb.WakeUp();
     }
 }

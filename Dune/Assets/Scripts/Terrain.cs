@@ -3,148 +3,240 @@ using UnityEngine;
 
 public class Terrain : MonoBehaviour
 {
-    [SerializeField] Transform player;
-    [SerializeField] float segmentWidth = 12f;
-    [SerializeField] int startingSegments = 10;
-    [SerializeField] int segmentsAhead = 5;
+    [Header("References")]
+    [SerializeField] private Transform player;
 
-    [SerializeField] float bottom = -8f;
-    [SerializeField] float minimumHeight = 0f;
-    [SerializeField] float maximumHeight = 4f;
+    [Header("Ground Prefabs")]
+    [SerializeField] private GroundPiece[] groundPrefabs;
 
-    [SerializeField] Material material;
+    [Header("Spawning")]
+    [SerializeField] private int startingPieces = 8;
 
-    readonly Queue<GameObject> segments = new();
+    [Tooltip("How far in front of the player ground should exist.")]
+    [SerializeField] private float spawnAheadDistance = 80f;
 
-    float nextX;
-    float previousHeight = 1f;
+    [Tooltip("How far behind the player pieces are removed.")]
+    [SerializeField] private float destroyBehindDistance = 40f;
 
-    void Start()
+    private readonly Queue<GameObject> activePieces = new();
+
+    private float nextSpawnX;
+    private float fixedGroundY;
+
+    private int nextGroundIndex;
+
+    private void Start()
     {
         if (!player)
-            player = FindFirstObjectByType<Player>().transform;
+        {
+            Player foundPlayer = FindFirstObjectByType<Player>();
 
-        for (int i = 0; i < startingSegments; i++)
-            CreateSegment();
+            if (foundPlayer)
+                player = foundPlayer.transform;
+        }
+
+        // Terrain object's X is where the first piece begins.
+        nextSpawnX = transform.position.x;
+
+        // Every ground piece uses this same Y.
+        fixedGroundY = transform.position.y;
+
+        // Begin from index 0.
+        nextGroundIndex = 0;
+
+        for (int i = 0; i < startingPieces; i++)
+        {
+            SpawnGroundPiece();
+        }
     }
 
-    void Update()
+    private void Update()
     {
-        if (!player) return;
+        if (!player)
+            return;
 
-        while (player.position.x + segmentWidth * segmentsAhead > nextX)
-            CreateSegment();
+        SpawnGroundAhead();
+        RemoveGroundBehind();
+    }
 
-        while (segments.Count > startingSegments + 2)
+    private void SpawnGroundAhead()
+    {
+        int safetyCounter = 0;
+        const int maxSpawnsPerFrame = 10;
+
+        while (player.position.x + spawnAheadDistance > nextSpawnX)
         {
-            GameObject first = segments.Peek();
+            float previousX = nextSpawnX;
 
-            if (first.transform.position.x + segmentWidth <
-                player.position.x - segmentWidth)
+            bool spawned = SpawnGroundPiece();
+
+            // Something went wrong. Stop immediately instead
+            // of allowing an infinite loop.
+            if (!spawned)
+                break;
+
+            // Ground did not move the spawn point forward.
+            if (nextSpawnX <= previousX)
             {
-                Destroy(segments.Dequeue());
+                Debug.LogError(
+                    "GROUND SPAWNING STOPPED! " +
+                    "EndPoint X must be greater than the GroundPiece root X."
+                );
+
+                break;
+            }
+
+            safetyCounter++;
+
+            if (safetyCounter >= maxSpawnsPerFrame)
+            {
+                Debug.LogWarning(
+                    "Terrain reached maximum ground spawns this frame."
+                );
+
+                break;
+            }
+        }
+    }
+
+    private bool SpawnGroundPiece()
+    {
+        if (groundPrefabs == null ||
+            groundPrefabs.Length == 0)
+        {
+            Debug.LogError(
+                "Terrain has no Ground Pieces assigned."
+            );
+
+            return false;
+        }
+
+        GroundPiece prefab =
+            GetGroundPieceByIndex(nextGroundIndex);
+
+        if (!prefab)
+        {
+            Debug.LogError(
+                "No GroundPiece found with index: " +
+                nextGroundIndex
+            );
+
+            return false;
+        }
+
+        Vector3 spawnPosition = new Vector3(
+            nextSpawnX,
+            fixedGroundY,
+            transform.position.z
+        );
+
+        GroundPiece spawnedPiece = Instantiate(
+            prefab,
+            spawnPosition,
+            Quaternion.identity,
+            transform
+        );
+
+        activePieces.Enqueue(
+            spawnedPiece.gameObject
+        );
+
+        float newEndX = spawnedPiece.EndX;
+
+        // Critical protection.
+        if (newEndX <= nextSpawnX)
+        {
+            Debug.LogError(
+                spawnedPiece.name +
+                " has an invalid EndPoint!\n" +
+                "Root X: " + nextSpawnX +
+                "\nEndPoint X: " + newEndX
+            );
+
+            return false;
+        }
+
+        nextSpawnX = newEndX;
+
+        AdvanceGroundIndex();
+
+        return true;
+    }
+
+    private GroundPiece GetGroundPieceByIndex(int index)
+    {
+        for (int i = 0; i < groundPrefabs.Length; i++)
+        {
+            if (!groundPrefabs[i])
+                continue;
+
+            if (groundPrefabs[i].Index == index)
+            {
+                return groundPrefabs[i];
+            }
+        }
+
+        return null;
+    }
+
+    private void AdvanceGroundIndex()
+    {
+        nextGroundIndex++;
+
+        // If that index doesn't exist,
+        // loop back to index 0.
+        if (!GroundIndexExists(nextGroundIndex))
+        {
+            nextGroundIndex = 0;
+        }
+    }
+
+    private bool GroundIndexExists(int index)
+    {
+        for (int i = 0; i < groundPrefabs.Length; i++)
+        {
+            if (!groundPrefabs[i])
+                continue;
+
+            if (groundPrefabs[i].Index == index)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void RemoveGroundBehind()
+    {
+        while (activePieces.Count > 0)
+        {
+            GameObject oldest =
+                activePieces.Peek();
+
+            if (!oldest)
+            {
+                activePieces.Dequeue();
+                continue;
+            }
+
+            float distanceBehind =
+                player.position.x -
+                oldest.transform.position.x;
+
+            if (
+                distanceBehind >
+                destroyBehindDistance
+            )
+            {
+                Destroy(
+                    activePieces.Dequeue()
+                );
             }
             else
             {
                 break;
             }
         }
-    }
-
-    void CreateSegment()
-    {
-        float x0 = nextX;
-        float x1 = nextX + segmentWidth;
-
-        float nextHeight = Random.Range(
-            minimumHeight,
-            maximumHeight
-        );
-
-        // Occasionally make a lower valley.
-        if (Random.value < .2f)
-            nextHeight = Random.Range(0f, 1.2f);
-
-        GameObject segment = new GameObject("Dune");
-        segment.transform.SetParent(transform);
-
-        int groundLayer = LayerMask.NameToLayer("Ground");
-        if (groundLayer >= 0)
-            segment.layer = groundLayer;
-
-        MeshFilter filter = segment.AddComponent<MeshFilter>();
-        MeshRenderer renderer = segment.AddComponent<MeshRenderer>();
-        PolygonCollider2D collider = segment.AddComponent<PolygonCollider2D>();
-
-        const int points = 9;
-
-        Vector3[] vertices = new Vector3[points + 2];
-
-        for (int i = 0; i < points; i++)
-        {
-            float t = i / (float)(points - 1);
-
-            // Smooth hill interpolation.
-            float smooth = (1f - Mathf.Cos(t * Mathf.PI)) * .5f;
-
-            float x = Mathf.Lerp(x0, x1, t);
-            float y = Mathf.Lerp(
-                previousHeight,
-                nextHeight,
-                smooth
-            );
-
-            vertices[i] = new Vector3(
-                x,
-                y,
-                0f
-            );
-        }
-
-        vertices[points] = new Vector3(x1, bottom, 0);
-        vertices[points + 1] = new Vector3(x0, bottom, 0);
-
-        Mesh mesh = new Mesh();
-        mesh.vertices = vertices;
-
-        int[] triangles = new int[(vertices.Length - 2) * 3];
-
-        int index = 0;
-
-        for (int i = 1; i < vertices.Length - 1; i++)
-        {
-            triangles[index++] = 0;
-            triangles[index++] = i;
-            triangles[index++] = i + 1;
-        }
-
-        mesh.triangles = triangles;
-        mesh.RecalculateBounds();
-
-        filter.sharedMesh = mesh;
-
-        if (material)
-        {
-            renderer.sharedMaterial = material;
-        }
-        else
-        {
-            Shader shader = Shader.Find("Sprites/Default");
-
-            if (shader)
-                renderer.sharedMaterial = new Material(shader);
-        }
-
-        Vector2[] path = new Vector2[vertices.Length];
-
-        for (int i = 0; i < vertices.Length; i++)
-            path[i] = vertices[i];
-
-        collider.SetPath(0, path);
-
-        segments.Enqueue(segment);
-
-        nextX = x1;
-        previousHeight = nextHeight;
     }
 }

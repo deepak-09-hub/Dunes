@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9199e2a8054ae74499d6da4e73512773, type: 3}
+  m_Name: Alien2
+  m_EditorClassIdentifier: 
+  ballId: alien2
+  displayName: Alien2
+  shopIcon: {fileID: -326824950, guid: 60744714e8ca21743a9eb397aa8ac357, type: 3}
+  gameplaySprite: {fileID: -326824950, guid: 60744714e8ca21743a9eb397aa8ac357, type: 3}
+  price: 100
+  unlockedByDefault: 0

@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9199e2a8054ae74499d6da4e73512773, type: 3}
+  m_Name: redplanet
+  m_EditorClassIdentifier: 
+  ballId: redplanet
+  displayName: RedPlanet
+  shopIcon: {fileID: -1104246652, guid: db9e175f3376cf24eb1f9092ac09d666, type: 3}
+  gameplaySprite: {fileID: -1104246652, guid: db9e175f3376cf24eb1f9092ac09d666, type: 3}
+  price: 550
+  unlockedByDefault: 0

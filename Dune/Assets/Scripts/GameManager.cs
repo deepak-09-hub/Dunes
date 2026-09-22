@@ -5,9 +5,18 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager I { get; private set; }
 
-    public bool Playing { get; private set; } = true;
+    public bool Playing { get; private set; } = false;
+
     public float Distance { get; private set; }
+
+    // Current run only.
     public int Score { get; private set; }
+
+    // Persistent best score.
+    public int HighScore { get; private set; }
+
+    // Persistent currency.
+    public int Coins { get; private set; }
 
     [Header("References")]
     [SerializeField] private Player player;
@@ -23,7 +32,8 @@ public class GameManager : MonoBehaviour
     [Tooltip("How much the score-line reward increases at each distance milestone.")]
     [SerializeField] private int scoreIncreasePerTier = 10;
 
-    private const string ScorePlayerPrefsKey = "SavedScore";
+    private const string HighScorePlayerPrefsKey = "HighScore";
+    private const string CoinsPlayerPrefsKey = "SavedCoins";
 
     private float startX;
 
@@ -31,8 +41,19 @@ public class GameManager : MonoBehaviour
     {
         I = this;
 
-        // Load the player's persistent score as soon as the game starts.
-        Score = PlayerPrefs.GetInt(ScorePlayerPrefsKey, 0);
+        // Every new run begins from 0.
+        Score = 0;
+
+        // These survive between sessions.
+        HighScore = PlayerPrefs.GetInt(
+            HighScorePlayerPrefsKey,
+            0
+        );
+
+        Coins = PlayerPrefs.GetInt(
+            CoinsPlayerPrefsKey,
+            0
+        );
     }
 
     private void Start()
@@ -43,12 +64,17 @@ public class GameManager : MonoBehaviour
         if (!ui)
             ui = FindFirstObjectByType<UIManager>();
 
-        if (player)
-            startX = player.transform.position.x;
+        Distance = 0f;
 
-        // Immediately show the saved score in the UI.
+        // Player stays completely frozen until Tap To Start.
+        if (player)
+            player.PrepareForStart();
+
         ui?.SetScore(Score);
-        ui?.SetDistance(0f);
+        ui?.SetHighScore(HighScore);
+        ui?.SetCoins(Coins);
+
+        ui?.ShowStartScreen();
     }
 
     private void Update()
@@ -56,8 +82,10 @@ public class GameManager : MonoBehaviour
         if (!Playing || !player)
             return;
 
+        // Still calculate distance because score progression uses it.
         Distance = GetCurrentDistance();
-        ui?.SetDistance(Distance);
+
+        // We intentionally do NOT display distance anymore.
     }
 
     private float GetCurrentDistance()
@@ -71,14 +99,10 @@ public class GameManager : MonoBehaviour
         );
     }
 
-    /// <summary>
-    /// Returns how many points the next upward score-line crossing is worth.
-    ///
-    /// 0 - 1499 distance    = 10 points
-    /// 1500 - 2999 distance = 20 points
-    /// 3000 - 4499 distance = 30 points
-    /// etc.
-    /// </summary>
+    // --------------------------------------------------
+    // SCORE
+    // --------------------------------------------------
+
     public int GetScoreLineReward()
     {
         float currentDistance = GetCurrentDistance();
@@ -101,12 +125,48 @@ public class GameManager : MonoBehaviour
 
         Score += amount;
 
-        // Save immediately so the score survives restart/app close.
-        PlayerPrefs.SetInt(ScorePlayerPrefsKey, Score);
+        ui?.SetScore(Score);
+
+        // Update best immediately.
+        if (Score > HighScore)
+        {
+            HighScore = Score;
+
+            PlayerPrefs.SetInt(
+                HighScorePlayerPrefsKey,
+                HighScore
+            );
+
+            PlayerPrefs.Save();
+
+            ui?.SetHighScore(HighScore);
+        }
+    }
+
+    // --------------------------------------------------
+    // COINS
+    // --------------------------------------------------
+
+    public void AddCoins(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        Coins += amount;
+
+        PlayerPrefs.SetInt(
+            CoinsPlayerPrefsKey,
+            Coins
+        );
+
         PlayerPrefs.Save();
 
-        ui?.SetScore(Score);
+        ui?.SetCoins(Coins);
     }
+
+    // --------------------------------------------------
+    // GAME OVER
+    // --------------------------------------------------
 
     public void Crash(string reason)
     {
@@ -118,7 +178,11 @@ public class GameManager : MonoBehaviour
         if (player)
             player.StopPlayer();
 
-        ui?.ShowGameOver(Distance, Score, reason);
+        ui?.ShowGameOver(
+            Score,
+            HighScore,
+            reason
+        );
     }
 
     public void Restart()
@@ -127,4 +191,50 @@ public class GameManager : MonoBehaviour
             SceneManager.GetActiveScene().buildIndex
         );
     }
+
+    public bool TrySpendCoins(int amount)
+    {
+        if (amount <= 0)
+            return true;
+
+        if (Coins < amount)
+            return false;
+
+        Coins -= amount;
+
+        PlayerPrefs.SetInt(
+            CoinsPlayerPrefsKey,
+            Coins
+        );
+
+        PlayerPrefs.Save();
+
+        ui?.SetCoins(Coins);
+
+        return true;
+    }
+
+    public void StartGame()
+    {
+        if (Playing)
+            return;
+
+        Playing = true;
+
+        Distance = 0f;
+        Score = 0;
+
+        if (player)
+        {
+            // Distance starts exactly from where
+            // the player begins this run.
+            startX = player.transform.position.x;
+
+            player.BeginGame();
+        }
+
+        ui?.SetScore(Score);
+        ui?.ShowGameplay();
+    }
 }
+
